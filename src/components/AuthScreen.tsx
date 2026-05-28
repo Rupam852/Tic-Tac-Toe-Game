@@ -64,7 +64,7 @@ export default function AuthScreen({ backendUrl = "", onAuthSuccess, soundVolume
     setRegError("");
 
     try {
-      const redirectUri = `${window.location.origin}/auth/google/callback`;
+      const redirectUri = `${backendUrl || window.location.origin}/auth/google/callback`;
       const response = await fetch(`${backendUrl}/api/auth/google/url?redirect_uri=${encodeURIComponent(redirectUri)}`);
       if (!response.ok) {
         throw new Error("Unable to obtain Google Auth parameters");
