@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+/* Ensure all buttons, clickable roles, and anchor tags show the hand gesture cursor (pointer) and support hover states */
+button, 
+[role="button"], 
+a,
+input[type="submit"],
+input[type="button"],
+select {
+  cursor: pointer !important;
+}
+
+/* Hide scrollbar globally across all elements for clean aesthetic */
+html, body {
+  -ms-overflow-style: none !important; /* IE and Edge */
+  scrollbar-width: none !important;    /* Firefox */
+}
+
+/* Chrome, Safari, and Opera scrollbar removal */
+*::-webkit-scrollbar {
+  display: none !important;
+}
+
+* {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none;    /* Firefox */
+}

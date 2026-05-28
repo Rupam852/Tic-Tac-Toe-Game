@@ -1,0 +1,475 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { ArrowLeft, RotateCcw, Monitor, Users, Globe, Send, MessageCircleCode, Smile } from "lucide-react";
+import { BoardState, GameState, User } from "../types";
+import { playSound } from "../utils/audio";
+
+interface GameAreaProps {
+  mode: "single" | "local" | "online";
+  user: User | null;
+  soundVolume: number;
+  onlineRoom: any | null; // From websocket matching
+  onlineSymbol: "X" | "O" | null;
+  onSendMove: (cellIndex: number) => void;
+  onSendRestart: () => void;
+  onSendChat: (content: string) => void;
+  onExit: () => void;
+  chatMessages: { sender: string; content: string; time: number }[];
+}
+
+export default function GameArea({
+  mode,
+  user,
+  soundVolume,
+  onlineRoom,
+  onlineSymbol,
+  onSendMove,
+  onSendRestart,
+  onSendChat,
+  onExit,
+  chatMessages,
+}: GameAreaProps) {
+  // Local (and Robot) Game State
+  const [localBoard, setLocalBoard] = useState<BoardState>(Array(9).fill(null));
+  const [localTurn, setLocalTurn] = useState<"X" | "O">("X");
+  const [localWinner, setLocalWinner] = useState<string | null>(null); // "X", "O", "draw", or null
+  const [localWinningLine, setLocalWinningLine] = useState<number[] | null>(null);
+  
+  // Scoreboard tracking for current session
+  const [sessionWinsX, setSessionWinsX] = useState(0);
+  const [sessionWinsO, setSessionWinsO] = useState(0);
+  const [sessionDraws, setSessionDraws] = useState(0);
+
+  // Chat/Emoji drawer parameters
+  const [chatInput, setChatInput] = useState("");
+  const [isEmojiTrayOpen, setIsEmojiTrayOpen] = useState(false);
+
+  const EMOJI_PRESETS = ["🎯", "🔥", "😂", "👑", "🤝", "😭", "😮", "🤖"];
+
+  // Reset internal local match
+  const handleLocalReset = () => {
+    playSound("click", soundVolume);
+    setLocalBoard(Array(9).fill(null));
+    setLocalTurn("X");
+    setLocalWinner(null);
+    setLocalWinningLine(null);
+  };
+
+  // Check winning outcomes
+  const getOutcome = (board: BoardState) => {
+    const lines = [
+      [0, 1, 2], [3, 4, 5], [6, 7, 8],
+      [0, 3, 6], [1, 4, 7], [2, 5, 8],
+      [0, 4, 8], [2, 4, 6]
+    ];
+    for (const combo of lines) {
+      const [a, b, c] = combo;
+      if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+        return { winner: board[a], line: combo };
+      }
+    }
+    const isFull = board.every((cell) => cell !== null);
+    return { winner: isFull ? "draw" : null, line: null };
+  };
+
+  // Play a move
+  const handleCellClick = (idx: number) => {
+    if (mode === "online") {
+      // In online mode, moves are sent to the WebSocket server for validation & broadcast
+      if (!onlineRoom || onlineRoom.state.status !== "playing") return;
+      if (onlineRoom.state.turn !== (user?.uid || "")) return; // Not your turn
+      if (onlineRoom.state.board[idx] !== null) return; // Occupied
+
+      playSound("place", soundVolume);
+      onSendMove(idx);
+      return;
+    }
+
+    // Local / Single match handling
+    if (localBoard[idx] !== null || localWinner) return;
+
+    const currentSymbol = localTurn;
+    const newBoard = [...localBoard];
+    newBoard[idx] = currentSymbol;
+    playSound("place", soundVolume);
+    setLocalBoard(newBoard);
+
+    const check = getOutcome(newBoard);
+    if (check.winner) {
+      setLocalWinner(check.winner);
+      setLocalWinningLine(check.line);
+      if (check.winner === "draw") {
+        setSessionDraws((d) => d + 1);
+        playSound("draw", soundVolume);
+      } else {
+        if (check.winner === "X") setSessionWinsX((w) => w + 1);
+        else setSessionWinsO((w) => w + 1);
+        playSound("win", soundVolume);
+      }
+    } else {
+      setLocalTurn(currentSymbol === "X" ? "O" : "X");
+    }
+  };
+
+  // Robot Algorithm turn logic
+  useEffect(() => {
+    if (mode !== "single" || localTurn !== "O" || localWinner) return;
+
+    // Simulate Robot choosing moves using a localized algorithm with completely random choices
+    const timer = setTimeout(() => {
+      const availableCells = localBoard
+        .map((val, idx) => (val === null ? idx : null))
+        .filter((val) => val !== null) as number[];
+
+      if (availableCells.length === 0) return;
+
+      // Select an available square completely at random as requested, without using any advanced AI/strategic heuristics
+      const randomIdx = Math.floor(Math.random() * availableCells.length);
+      const chosenIndex = availableCells[randomIdx];
+
+      // Execute AI Move
+      const newBoard = [...localBoard];
+      newBoard[chosenIndex] = "O";
+      playSound("place", soundVolume);
+      setLocalBoard(newBoard);
+
+      const check = getOutcome(newBoard);
+      if (check.winner) {
+        setLocalWinner(check.winner);
+        setLocalWinningLine(check.line);
+        if (check.winner === "draw") {
+          setSessionDraws((d) => d + 1);
+          playSound("draw", soundVolume);
+        } else {
+          setSessionWinsO((w) => w + 1);
+          playSound("win", soundVolume);
+        }
+      } else {
+        setLocalTurn("X");
+      }
+    }, 600); // realistic slight response lag for AI
+
+    return () => clearTimeout(timer);
+  }, [localTurn, localWinner, mode, localBoard]);
+
+  // Online game status mappings
+  const isOnlineWin = mode === "online" && onlineRoom?.state.status === "ended";
+  const onlineWinnerUID = mode === "online" && onlineRoom?.state.winner;
+  const onlineWinnerLine = mode === "online" && onlineRoom?.state.winningLine;
+
+  const currentBoard = mode === "online" ? (onlineRoom?.state.board || Array(9).fill(null)) : localBoard;
+  const currentWinner = mode === "online" ? onlineRoom?.state.winner : localWinner;
+  const currentWinningStreak = mode === "online" ? onlineWinnerLine : localWinningLine;
+
+  // Compute status lines
+  let statusMessage = "";
+  let highlightTurn = false;
+
+  if (mode === "online" && onlineRoom) {
+    const state = onlineRoom.state;
+    if (state.status === "waiting") {
+      statusMessage = "Inviting Friend... Match code: " + onlineRoom.code;
+    } else if (state.status === "playing") {
+      const isMyTurn = state.turn === (user?.uid || "");
+      statusMessage = isMyTurn ? `Your Turn (${onlineSymbol})` : "Opponent Turn";
+      highlightTurn = isMyTurn;
+    } else if (state.status === "ended") {
+      if (state.winner === "draw") {
+        statusMessage = "Game ends in a Draw!";
+      } else {
+        const isMeWinner = state.winner === (user?.uid || "");
+        statusMessage = isMeWinner ? "🏆 Victory! You won match" : "Opponent won match";
+      }
+    }
+  } else {
+    // Single / Local match
+    if (localWinner) {
+      if (localWinner === "draw") {
+        statusMessage = "It's a Draw!";
+      } else {
+        statusMessage = mode === "single" 
+          ? (localWinner === "X" ? "🏆 You Won!" : "🤖 Robot Won!")
+          : `Gamer ${localWinner} Won!`;
+      }
+    } else {
+      statusMessage = mode === "single"
+        ? (localTurn === "X" ? "Your Turn" : "Robot Turn...")
+        : `Turn: Gamer ${localTurn}`;
+      highlightTurn = localTurn === "X";
+    }
+  }
+
+  const handleSendChatSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim()) return;
+    onSendChat(chatInput.trim());
+    setChatInput("");
+  };
+
+  const handleEmojiClick = (emoji: string) => {
+    playSound("click", soundVolume);
+    onSendChat(emoji);
+    setIsEmojiTrayOpen(false);
+  };
+
+  return (
+    <div className="mx-auto w-full max-w-4xl px-2 py-4">
+      {/* Navigation and Title Row */}
+      <div className="flex items-center justify-between pb-4 border-b border-zinc-100 dark:border-zinc-800 mb-6">
+        <button
+          id="exit-game-area-btn"
+          onClick={() => {
+            playSound("click", soundVolume);
+            onExit();
+          }}
+          className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 dark:border-slate-800 dark:text-slate-300 transition-all hover:bg-slate-50 dark:hover:bg-slate-900 hover:scale-[1.03] active:scale-[0.97] duration-155"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Leave Match
+        </button>
+
+        <div className="flex items-center gap-1.5">
+          {mode === "single" && <Monitor className="h-4 w-4 text-blue-500" />}
+          {mode === "local" && <Users className="h-4 w-4 text-blue-500" />}
+          {mode === "online" && <Globe className="h-4 w-4 text-blue-500" />}
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            {mode === "single" ? "Vs Robot (Random Algo)" : mode === "local" ? "Pass & Play" : "Competitive Room"}
+          </span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+        {/* Playable Arena Column */}
+        <div className="md:col-span-7 flex flex-col items-center">
+          
+          {/* Active status Banner */}
+          <div className="mb-4 text-center">
+            <motion.h4
+              animate={{ scale: highlightTurn ? [1, 1.03, 1] : 1 }}
+              transition={{ repeat: Infinity, duration: 1.5 }}
+              className={`text-base font-bold tracking-tight rounded-full px-5 py-1.5 ${
+                highlightTurn
+                  ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400"
+                  : "text-slate-700 dark:text-slate-300"
+              }`}
+            >
+              {statusMessage}
+            </motion.h4>
+          </div>
+
+          {/* Core Interactive Board Grid (Touch area exceeds 44px boundaries) */}
+          <div className="relative aspect-square w-full max-w-sm rounded-2xl bg-slate-55 p-4 border border-slate-200/50 dark:bg-[#0B1120]/45 dark:border-slate-800 shadow-md">
+            <div className="grid grid-cols-3 gap-3 h-full w-full">
+              {currentBoard.map((cellValue, idx) => {
+                const isSelectedCellInWinLine = currentWinningStreak?.includes(idx);
+                return (
+                  <button
+                    key={idx}
+                    id={`grid-cell-${idx}`}
+                    onClick={() => handleCellClick(idx)}
+                    className={`relative flex items-center justify-center rounded-xl bg-white shadow-xs transition-all duration-150 touch-manipulation hover:scale-102 hover:shadow-md dark:bg-slate-900 border border-slate-150 dark:border-slate-800 ${
+                      isSelectedCellInWinLine
+                        ? "bg-blue-600 text-white dark:bg-blue-500 border-blue-500"
+                        : "text-slate-800 dark:text-slate-100"
+                    }`}
+                    style={{ minHeight: "84px" }}
+                    disabled={
+                      (mode === "online" && onlineRoom?.state.status !== "playing") ||
+                      (mode === "online" && onlineRoom?.state.turn !== user?.uid)
+                    }
+                  >
+                    {cellValue && (
+                      <motion.span
+                        initial={{ opacity: 0, scale: 0.2 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className={`font-sans font-black text-4xl select-none ${
+                          isSelectedCellInWinLine
+                            ? "text-white"
+                            : cellValue === "X"
+                            ? "text-blue-500 font-sans tracking-tighter"
+                            : "text-rose-500 font-sans"
+                        }`}
+                      >
+                        {cellValue}
+                      </motion.span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Quick Score Counter summary */}
+          {mode !== "online" && (
+            <div className="mt-6 flex justify-around w-full max-w-sm bg-zinc-50 dark:bg-zinc-950/35 p-3.5 rounded-xl text-center border border-zinc-100 dark:border-zinc-850">
+              <div>
+                <p className="text-[10px] uppercase tracking-wider font-semibold text-zinc-400">Wins (X)</p>
+                <p className="text-sm font-mono font-bold text-zinc-900 dark:text-zinc-50 mt-0.5">{sessionWinsX}</p>
+              </div>
+              <div className="border-r border-zinc-200/60 dark:border-zinc-800"></div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider font-semibold text-zinc-400">Draws</p>
+                <p className="text-sm font-mono font-bold text-zinc-900 dark:text-zinc-50 mt-0.5">{sessionDraws}</p>
+              </div>
+              <div className="border-r border-zinc-200/60 dark:border-zinc-800"></div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider font-semibold text-zinc-400">Wins (O)</p>
+                <p className="text-sm font-mono font-bold text-zinc-900 dark:text-zinc-50 mt-0.5">{sessionWinsO}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Interactive Actions Overlay */}
+          {currentWinner && (
+            <div className="mt-5 w-full max-w-sm space-y-2.5">
+              {mode === "online" ? (
+                /* Online Match Rematches controls */
+                <div className="rounded-xl bg-blue-50/50 p-4 border border-blue-100 text-center dark:bg-[#0B1120]/60 dark:border-slate-800">
+                  {onlineRoom.state.rematchRequestedBy ? (
+                    onlineRoom.state.rematchRequestedBy === user?.uid ? (
+                      <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Waiting for opponent to accept rematch...</p>
+                    ) : (
+                      <div className="space-y-3">
+                        <p className="text-xs text-blue-700 dark:text-blue-300 font-semibold font-sans">Opponent requested a rematch!</p>
+                        <button
+                          id="accept-online-rematch-btn"
+                          onClick={() => {
+                            playSound("click", soundVolume);
+                            onSendRestart();
+                          }}
+                          className="w-full rounded-xl bg-blue-600 py-2.5 text-xs font-bold text-white transition-all hover:bg-blue-500 hover:scale-[1.02] active:scale-[0.98] duration-155 shadow-md shadow-blue-500/10"
+                        >
+                          Accept Rematch Offer
+                        </button>
+                      </div>
+                    )
+                  ) : (
+                    <button
+                      id="request-online-rematch-btn"
+                      onClick={() => {
+                        playSound("click", soundVolume);
+                        onSendRestart();
+                      }}
+                      className="w-full rounded-xl bg-blue-600 py-2.5 text-xs font-bold text-white transition-all hover:bg-blue-500 hover:scale-[1.02] active:scale-[0.98] duration-155 shadow-md shadow-blue-500/10"
+                    >
+                      Offer Game Rematch
+                    </button>
+                  )}
+                </div>
+              ) : (
+                /* Local & Single match resets */
+                <button
+                  id="local-rematch-btn"
+                  onClick={handleLocalReset}
+                  className="flex items-center justify-center gap-2 w-full rounded-xl bg-blue-600 py-2.5 text-xs font-bold text-white transition-all hover:bg-blue-500 hover:scale-[1.02] active:scale-[0.98] duration-155 shadow-md shadow-blue-500/10"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Play Again
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Dynamic Communication Socket Chat Drawer (Online matches only) */}
+        {mode === "online" && (
+          <div className="md:col-span-5 w-full flex flex-col h-96 md:h-[432px] bg-white rounded-xl border border-slate-205 dark:bg-[#0B1120]/45 dark:border-slate-800 p-4 shadow-sm overflow-hidden">
+            <h5 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b pb-2 mb-3 flex items-center gap-1.5 dark:border-slate-800">
+              <MessageCircleCode className="h-4 w-4 text-blue-500" />
+              Room Live Chat & Taunts
+            </h5>
+
+            {/* Chat Messages */}
+            <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 text-xs">
+              {chatMessages.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-zinc-400 dark:text-zinc-600">
+                  No chat messages yet.
+                </div>
+              ) : (
+                chatMessages.map((msg, i) => {
+                  return (
+                    <div
+                      key={i}
+                      className={`max-w-[85%] rounded-xl px-3 py-1.5 ${
+                        msg.sender === (user?.username || "Guest")
+                          ? "ml-auto bg-blue-600 text-white"
+                          : "bg-slate-100 text-slate-800 dark:bg-[#0B1120] dark:text-slate-205"
+                      }`}
+                    >
+                      <p className="text-[9px] opacity-75 font-semibold">
+                        {msg.sender}
+                      </p>
+                      <p className="mt-0.5 leading-relaxed font-sans font-medium text-xs break-all">
+                        {msg.content}
+                      </p>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Emoji and taunts triggers row */}
+            <div className="relative mt-3">
+              <AnimatePresence>
+                {isEmojiTrayOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="absolute bottom-12 left-0 right-0 bg-slate-50 dark:bg-[#0B1120] p-2 rounded-xl grid grid-cols-4 gap-2 border border-slate-200 dark:border-slate-800 shadow-md"
+                  >
+                    {EMOJI_PRESETS.map((emoji) => (
+                      <button
+                        key={emoji}
+                        onClick={() => handleEmojiClick(emoji)}
+                        className="text-lg hover:scale-125 transition-transform py-1 rounded-md"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Input Form */}
+              <form onSubmit={handleSendChatSubmit} className="flex gap-2">
+                <button
+                  id="emoji-tray-btn"
+                  type="button"
+                  onClick={() => {
+                    playSound("click", soundVolume);
+                    setIsEmojiTrayOpen(!isEmojiTrayOpen);
+                  }}
+                  className="rounded-lg p-2 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 transition-all hover:bg-slate-200 dark:hover:bg-slate-700 hover:scale-108 active:scale-92 duration-155"
+                  title="Emoji list"
+                >
+                  <Smile className="h-4 w-4" />
+                </button>
+                <input
+                  id="chat-input-text"
+                  type="text"
+                  placeholder="Type taunts..."
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs focus:ring-1 focus:ring-blue-500 dark:border-slate-800 dark:bg-[#0B1120] dark:text-white"
+                />
+                <button
+                  id="send-chat-payload-btn"
+                  type="submit"
+                  className="rounded-lg bg-blue-600 p-2 text-white transition-all hover:bg-blue-500 hover:scale-108 active:scale-92 duration-155"
+                >
+                  <Send className="h-4 w-4" />
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

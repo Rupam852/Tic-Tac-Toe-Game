@@ -1,0 +1,6 @@
+{
+  "name": "Tic-Tac-Toe Live",
+  "description": "Full-of-features Tic-Tac-Toe with real-time multiplayer, robot matches, global leaderboards, sound effects, and secure accounts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
