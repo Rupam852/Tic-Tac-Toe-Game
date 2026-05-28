@@ -176,6 +176,27 @@ export default function App() {
           type: "register_socket",
           payload: { user }
         }));
+
+        // Auto-join room if room code parameter exists in URL
+        const params = new URLSearchParams(window.location.search);
+        const queryRoomCode = params.get("room");
+        if (queryRoomCode && queryRoomCode.trim()) {
+          const cleanCode = queryRoomCode.trim().toUpperCase();
+          console.log(`[Auto-Join] Detected room code in URL: ${cleanCode}`);
+          
+          // Clear query params immediately so refreshes are clean
+          window.history.replaceState({}, document.title, window.location.pathname);
+
+          // Tiny buffer to let server finalize registration mapping
+          setTimeout(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({
+                type: "join_room",
+                payload: { code: cleanCode }
+              }));
+            }
+          }, 150);
+        }
       };
 
       ws.onmessage = (event) => {
@@ -347,14 +368,15 @@ export default function App() {
   const handleShareInvite = async () => {
     playSound("click", settings.soundVolume);
     if (!onlineRoom) return;
-    const inviteText = `Play Tic-Tac-Toe Live with me! 🎮\n\nRoom Code: ${onlineRoom.code}\nJoin here: ${window.location.origin}`;
+    const inviteUrl = `${window.location.origin}?room=${onlineRoom.code}`;
+    const inviteText = `Play Tic-Tac-Toe Live with me! 🎮\n\nRoom Code: ${onlineRoom.code}\nJoin instantly here: ${inviteUrl}`;
     
     if (navigator.share) {
       try {
         await navigator.share({
           title: "Tic-Tac-Toe Live Match Invite",
           text: inviteText,
-          url: window.location.origin
+          url: inviteUrl
         });
         addToast("Invitation shared successfully!", "success");
       } catch (err) {
@@ -363,7 +385,7 @@ export default function App() {
     } else {
       try {
         await navigator.clipboard.writeText(inviteText);
-        addToast("Invite copied to clipboard! Paste it to share.", "success");
+        addToast("Instant Join link copied to clipboard! Paste it to share.", "success");
       } catch (err) {
         addToast("Failed to copy invitation message", "error");
       }
