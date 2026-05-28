@@ -20,6 +20,99 @@ interface GameAreaProps {
   onSendChat: (content: string) => void;
   onExit: () => void;
   chatMessages: { sender: string; content: string; time: number }[];
+  difficulty?: "easy" | "medium" | "hard";
+}
+
+const WINNING_LINES = [
+  [0, 1, 2], [3, 4, 5], [6, 7, 8],
+  [0, 3, 6], [1, 4, 7], [2, 5, 8],
+  [0, 4, 8], [2, 4, 6]
+];
+
+function getOutcome(board: BoardState): { winner: string | null; line: number[] | null } {
+  for (const combo of WINNING_LINES) {
+    const [a, b, c] = combo;
+    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+      return { winner: board[a], line: combo };
+    }
+  }
+  const isFull = board.every((cell) => cell !== null);
+  return { winner: isFull ? "draw" : null, line: null };
+}
+
+function minimax(board: BoardState, depth: number, isMaximizing: boolean): { score: number; index?: number } {
+  const check = getOutcome(board);
+  if (check.winner === "O") return { score: 10 - depth };
+  if (check.winner === "X") return { score: depth - 10 };
+  if (check.winner === "draw") return { score: 0 };
+
+  const available = board.map((val, idx) => val === null ? idx : null).filter((v) => v !== null) as number[];
+
+  if (isMaximizing) {
+    let bestScore = -Infinity;
+    let bestIndex = -1;
+    for (const idx of available) {
+      board[idx] = "O";
+      const { score } = minimax(board, depth + 1, false);
+      board[idx] = null;
+      if (score > bestScore) {
+        bestScore = score;
+        bestIndex = idx;
+      }
+    }
+    return { score: bestScore, index: bestIndex };
+  } else {
+    let bestScore = Infinity;
+    let bestIndex = -1;
+    for (const idx of available) {
+      board[idx] = "X";
+      const { score } = minimax(board, depth + 1, true);
+      board[idx] = null;
+      if (score < bestScore) {
+        bestScore = score;
+        bestIndex = idx;
+      }
+    }
+    return { score: bestScore, index: bestIndex };
+  }
+}
+
+function getMediumMove(board: BoardState): number {
+  // 1. Can bot "O" win immediately?
+  for (let i = 0; i < 9; i++) {
+    if (board[i] === null) {
+      const tempBoard = [...board];
+      tempBoard[i] = "O";
+      if (getOutcome(tempBoard).winner === "O") {
+        return i;
+      }
+    }
+  }
+
+  // 2. Can player "X" win immediately? If so, block it!
+  for (let i = 0; i < 9; i++) {
+    if (board[i] === null) {
+      const tempBoard = [...board];
+      tempBoard[i] = "X";
+      if (getOutcome(tempBoard).winner === "X") {
+        return i;
+      }
+    }
+  }
+
+  // 3. Play center if open
+  if (board[4] === null) return 4;
+
+  // 4. Play any open corner
+  const corners = [0, 2, 6, 8];
+  const openCorners = corners.filter((c) => board[c] === null);
+  if (openCorners.length > 0) {
+    return openCorners[Math.floor(Math.random() * openCorners.length)];
+  }
+
+  // 5. Play any random open cell
+  const openCells = board.map((v, i) => v === null ? i : null).filter((v) => v !== null) as number[];
+  return openCells[Math.floor(Math.random() * openCells.length)];
 }
 
 export default function GameArea({
@@ -33,6 +126,7 @@ export default function GameArea({
   onSendChat,
   onExit,
   chatMessages,
+  difficulty = "easy",
 }: GameAreaProps) {
   // Local (and Robot) Game State
   const [localBoard, setLocalBoard] = useState<BoardState>(Array(9).fill(null));
@@ -49,6 +143,36 @@ export default function GameArea({
   const [chatInput, setChatInput] = useState("");
   const [isEmojiTrayOpen, setIsEmojiTrayOpen] = useState(false);
 
+  const [timeLeft, setTimeLeft] = useState<string>("");
+  const [isExpired, setIsExpired] = useState<boolean>(false);
+
+  // 10-Minute Countdown Timer for Online Rooms
+  useEffect(() => {
+    if (mode !== "online" || !onlineRoom || !onlineRoom.expiresAt) {
+      setTimeLeft("");
+      setIsExpired(false);
+      return;
+    }
+
+    const updateTimer = () => {
+      const diff = onlineRoom.expiresAt - Date.now();
+      if (diff <= 0) {
+        setTimeLeft("00:00");
+        setIsExpired(true);
+        return;
+      }
+
+      const mins = Math.floor(diff / 60000);
+      const secs = Math.floor((diff % 60000) / 1000);
+      const formatted = `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+      setTimeLeft(formatted);
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [mode, onlineRoom]);
+
   const EMOJI_PRESETS = ["🎯", "🔥", "😂", "👑", "🤝", "😭", "😮", "🤖"];
 
   // Reset internal local match
@@ -58,23 +182,6 @@ export default function GameArea({
     setLocalTurn("X");
     setLocalWinner(null);
     setLocalWinningLine(null);
-  };
-
-  // Check winning outcomes
-  const getOutcome = (board: BoardState) => {
-    const lines = [
-      [0, 1, 2], [3, 4, 5], [6, 7, 8],
-      [0, 3, 6], [1, 4, 7], [2, 5, 8],
-      [0, 4, 8], [2, 4, 6]
-    ];
-    for (const combo of lines) {
-      const [a, b, c] = combo;
-      if (board[a] && board[a] === board[b] && board[a] === board[c]) {
-        return { winner: board[a], line: combo };
-      }
-    }
-    const isFull = board.every((cell) => cell !== null);
-    return { winner: isFull ? "draw" : null, line: null };
   };
 
   // Play a move
@@ -120,7 +227,7 @@ export default function GameArea({
   useEffect(() => {
     if (mode !== "single" || localTurn !== "O" || localWinner) return;
 
-    // Simulate Robot choosing moves using a localized algorithm with completely random choices
+    // Simulate Robot choosing moves using easy, medium, or hard algorithms
     const timer = setTimeout(() => {
       const availableCells = localBoard
         .map((val, idx) => (val === null ? idx : null))
@@ -128,9 +235,16 @@ export default function GameArea({
 
       if (availableCells.length === 0) return;
 
-      // Select an available square completely at random as requested, without using any advanced AI/strategic heuristics
-      const randomIdx = Math.floor(Math.random() * availableCells.length);
-      const chosenIndex = availableCells[randomIdx];
+      let chosenIndex = -1;
+      if (difficulty === "easy") {
+        const randomIdx = Math.floor(Math.random() * availableCells.length);
+        chosenIndex = availableCells[randomIdx];
+      } else if (difficulty === "medium") {
+        chosenIndex = getMediumMove(localBoard);
+      } else {
+        const best = minimax(localBoard, 0, true);
+        chosenIndex = best.index !== undefined ? best.index : availableCells[0];
+      }
 
       // Execute AI Move
       const newBoard = [...localBoard];
@@ -155,7 +269,7 @@ export default function GameArea({
     }, 600); // realistic slight response lag for AI
 
     return () => clearTimeout(timer);
-  }, [localTurn, localWinner, mode, localBoard]);
+  }, [localTurn, localWinner, mode, localBoard, difficulty]);
 
   // Online game status mappings
   const isOnlineWin = mode === "online" && onlineRoom?.state.status === "ended";
@@ -233,13 +347,26 @@ export default function GameArea({
           Leave Match
         </button>
 
-        <div className="flex items-center gap-1.5">
-          {mode === "single" && <Monitor className="h-4 w-4 text-blue-500" />}
-          {mode === "local" && <Users className="h-4 w-4 text-blue-500" />}
-          {mode === "online" && <Globe className="h-4 w-4 text-blue-500" />}
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-            {mode === "single" ? "Vs Robot (Random Algo)" : mode === "local" ? "Pass & Play" : "Competitive Room"}
-          </span>
+        <div className="flex items-center gap-3">
+          {mode === "online" && timeLeft && (
+            <div className="flex items-center gap-1.5 bg-rose-500/10 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400 px-3 py-1 rounded-full text-xs font-extrabold shadow-sm border border-rose-500/20 animate-pulse">
+              <span className="h-1.5 w-1.5 rounded-full bg-rose-500"></span>
+              <span>Expires in {timeLeft}</span>
+            </div>
+          )}
+
+          <div className="flex items-center gap-1.5">
+            {mode === "single" && <Monitor className="h-4 w-4 text-blue-500" />}
+            {mode === "local" && <Users className="h-4 w-4 text-blue-500" />}
+            {mode === "online" && <Globe className="h-4 w-4 text-blue-500" />}
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              {mode === "single" 
+                ? `Vs Robot (${difficulty.charAt(0).toUpperCase() + difficulty.slice(1)})` 
+                : mode === "local" 
+                ? "Pass & Play" 
+                : "10-Min Room"}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -263,7 +390,24 @@ export default function GameArea({
           </div>
 
           {/* Core Interactive Board Grid (Touch area exceeds 44px boundaries) */}
-          <div className="relative aspect-square w-full max-w-sm rounded-2xl bg-slate-55 p-4 border border-slate-200/50 dark:bg-[#0B1120]/45 dark:border-slate-800 shadow-md">
+          <div className="relative aspect-square w-full max-w-sm rounded-2xl bg-slate-55 p-4 border border-slate-200/50 dark:bg-[#0B1120]/45 dark:border-slate-800 shadow-md overflow-hidden">
+            
+            {/* Expiry overlay */}
+            {isExpired && (
+              <div className="absolute inset-0 bg-slate-950/95 backdrop-blur-md flex flex-col items-center justify-center text-center p-6 z-30 space-y-4">
+                <h3 className="text-xl font-black text-rose-500 uppercase tracking-wider">Room Expired!</h3>
+                <p className="text-xs text-slate-350 max-w-xs leading-relaxed">
+                  This room has reached its 10-minute active lifetime limit and has been automatically terminated.
+                </p>
+                <button
+                  onClick={onExit}
+                  className="rounded-xl bg-blue-600 hover:bg-blue-500 py-2.5 px-6 text-xs font-bold text-white transition-all duration-150 shadow-md shadow-blue-500/20"
+                >
+                  Return to Lobby
+                </button>
+              </div>
+            )}
+
             <div className="grid grid-cols-3 gap-3 h-full w-full">
               {currentBoard.map((cellValue, idx) => {
                 const isSelectedCellInWinLine = currentWinningStreak?.includes(idx);

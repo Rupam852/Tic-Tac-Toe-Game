@@ -38,6 +38,7 @@ export interface GameRoom {
   creatorId: string;
   state: GameState;
   createdAt: number;
+  expiresAt?: number; // 10-minute expiry timestamp
 }
 
 export interface MatchHistoryItem {
