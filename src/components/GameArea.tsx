@@ -129,15 +129,34 @@ export default function GameArea({
   difficulty = "easy",
 }: GameAreaProps) {
   // Local (and Robot) Game State
-  const [localBoard, setLocalBoard] = useState<BoardState>(Array(9).fill(null));
-  const [localTurn, setLocalTurn] = useState<"X" | "O">("X");
-  const [localWinner, setLocalWinner] = useState<string | null>(null); // "X", "O", "draw", or null
-  const [localWinningLine, setLocalWinningLine] = useState<number[] | null>(null);
+  const [localBoard, setLocalBoard] = useState<BoardState>(() => {
+    const saved = sessionStorage.getItem("local_board");
+    return saved ? JSON.parse(saved) : Array(9).fill(null);
+  });
+  const [localTurn, setLocalTurn] = useState<"X" | "O">(
+    () => (sessionStorage.getItem("local_turn") as "X" | "O") || "X"
+  );
+  const [localWinner, setLocalWinner] = useState<string | null>(
+    () => sessionStorage.getItem("local_winner") || null
+  ); // "X", "O", "draw", or null
+  const [localWinningLine, setLocalWinningLine] = useState<number[] | null>(() => {
+    const saved = sessionStorage.getItem("local_winning_line");
+    return saved ? JSON.parse(saved) : null;
+  });
   
   // Scoreboard tracking for current session
-  const [sessionWinsX, setSessionWinsX] = useState(0);
-  const [sessionWinsO, setSessionWinsO] = useState(0);
-  const [sessionDraws, setSessionDraws] = useState(0);
+  const [sessionWinsX, setSessionWinsX] = useState(() => {
+    const saved = sessionStorage.getItem("session_wins_x");
+    return saved ? parseInt(saved, 10) : 0;
+  });
+  const [sessionWinsO, setSessionWinsO] = useState(() => {
+    const saved = sessionStorage.getItem("session_wins_o");
+    return saved ? parseInt(saved, 10) : 0;
+  });
+  const [sessionDraws, setSessionDraws] = useState(() => {
+    const saved = sessionStorage.getItem("session_draws");
+    return saved ? parseInt(saved, 10) : 0;
+  });
 
   // Chat/Emoji drawer parameters
   const [chatInput, setChatInput] = useState("");
@@ -145,6 +164,32 @@ export default function GameArea({
 
   const [timeLeft, setTimeLeft] = useState<string>("");
   const [isExpired, setIsExpired] = useState<boolean>(false);
+
+  const clearSessionStorage = () => {
+    sessionStorage.removeItem("local_board");
+    sessionStorage.removeItem("local_turn");
+    sessionStorage.removeItem("local_winner");
+    sessionStorage.removeItem("local_winning_line");
+  };
+
+  // Sync board state & scores to sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem("local_board", JSON.stringify(localBoard));
+    sessionStorage.setItem("local_turn", localTurn);
+    if (localWinner) {
+      sessionStorage.setItem("local_winner", localWinner);
+    } else {
+      sessionStorage.removeItem("local_winner");
+    }
+    if (localWinningLine) {
+      sessionStorage.setItem("local_winning_line", JSON.stringify(localWinningLine));
+    } else {
+      sessionStorage.removeItem("local_winning_line");
+    }
+    sessionStorage.setItem("session_wins_x", sessionWinsX.toString());
+    sessionStorage.setItem("session_wins_o", sessionWinsO.toString());
+    sessionStorage.setItem("session_draws", sessionDraws.toString());
+  }, [localBoard, localTurn, localWinner, localWinningLine, sessionWinsX, sessionWinsO, sessionDraws]);
 
   // 10-Minute Countdown Timer for Online Rooms
   useEffect(() => {
@@ -182,6 +227,7 @@ export default function GameArea({
     setLocalTurn("X");
     setLocalWinner(null);
     setLocalWinningLine(null);
+    clearSessionStorage();
   };
 
   // Play a move
@@ -339,6 +385,11 @@ export default function GameArea({
           id="exit-game-area-btn"
           onClick={() => {
             playSound("click", soundVolume);
+            clearSessionStorage();
+            // Also let's clear the persistent session wins
+            sessionStorage.removeItem("session_wins_x");
+            sessionStorage.removeItem("session_wins_o");
+            sessionStorage.removeItem("session_draws");
             onExit();
           }}
           className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 dark:border-slate-800 dark:text-slate-300 transition-all hover:bg-slate-50 dark:hover:bg-slate-900 hover:scale-[1.03] active:scale-[0.97] duration-155"

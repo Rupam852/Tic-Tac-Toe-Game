@@ -32,10 +32,18 @@ export default function App() {
   const [activeView, setActiveView] = useState<"landing" | "menu">(
     () => (sessionStorage.getItem("active_view") as "landing" | "menu") || "landing"
   );
-  const [activeGameMode, setActiveGameMode] = useState<"single" | "local" | "online" | null>(null);
+  const [activeGameMode, setActiveGameMode] = useState<"single" | "local" | "online" | null>(() => {
+    const saved = sessionStorage.getItem("active_game_mode");
+    if (saved === "single" || saved === "local") {
+      return saved as "single" | "local";
+    }
+    return null;
+  });
 
   // Bot Difficulty Settings
-  const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard">("easy");
+  const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard">(
+    () => (sessionStorage.getItem("bot_difficulty") as "easy" | "medium" | "hard") || "easy"
+  );
   const [showDifficultyModal, setShowDifficultyModal] = useState(false);
 
   // Anonymous Guest Profile State
@@ -87,6 +95,20 @@ export default function App() {
   useEffect(() => {
     sessionStorage.setItem("active_view", activeView);
   }, [activeView]);
+
+  // Sync activeGameMode to sessionStorage
+  useEffect(() => {
+    if (activeGameMode) {
+      sessionStorage.setItem("active_game_mode", activeGameMode);
+    } else {
+      sessionStorage.removeItem("active_game_mode");
+    }
+  }, [activeGameMode]);
+
+  // Sync difficulty to sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem("bot_difficulty", difficulty);
+  }, [difficulty]);
 
   // Load Saved Preferences and Initialize Guest Profile on Mount
   useEffect(() => {
