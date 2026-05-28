@@ -330,20 +330,33 @@ export default function GameArea({
   let statusMessage = "";
   let highlightTurn = false;
 
+  const isXActive = mode === "online"
+    ? (onlineRoom?.state.status === "playing" && onlineRoom?.state.turn === onlineRoom?.state.playerX.uid)
+    : (!localWinner && localTurn === "X");
+  const isOActive = mode === "online"
+    ? (onlineRoom?.state.status === "playing" && onlineRoom?.state.turn === onlineRoom?.state.playerO?.uid)
+    : (!localWinner && localTurn === "O");
+
   if (mode === "online" && onlineRoom) {
     const state = onlineRoom.state;
     if (state.status === "waiting") {
       statusMessage = "Inviting Friend... Match code: " + onlineRoom.code;
     } else if (state.status === "playing") {
       const isMyTurn = state.turn === (user?.uid || "");
-      statusMessage = isMyTurn ? `Your Turn (${onlineSymbol})` : "Opponent Turn";
+      const activeLabel = state.turn === state.playerX.uid ? "Player 1 (X)" : "Player 2 (O)";
+      statusMessage = isMyTurn ? `Your Turn (${onlineSymbol})` : `${activeLabel} Turn`;
       highlightTurn = isMyTurn;
     } else if (state.status === "ended") {
       if (state.winner === "draw") {
         statusMessage = "Game ends in a Draw!";
       } else {
         const isMeWinner = state.winner === (user?.uid || "");
-        statusMessage = isMeWinner ? "🏆 Victory! You won match" : "Opponent won match";
+        if (isMeWinner) {
+          statusMessage = "🏆 Victory! You won the match";
+        } else {
+          const winnerLabel = state.winner === state.playerX.uid ? "Player 1 (X)" : "Player 2 (O)";
+          statusMessage = `${winnerLabel} won the match`;
+        }
       }
     }
   } else {
@@ -354,12 +367,12 @@ export default function GameArea({
       } else {
         statusMessage = mode === "single" 
           ? (localWinner === "X" ? "🏆 You Won!" : "🤖 Robot Won!")
-          : `Gamer ${localWinner} Won!`;
+          : `Player ${localWinner === "X" ? "1 (X)" : "2 (O)"} Won!`;
       }
     } else {
       statusMessage = mode === "single"
         ? (localTurn === "X" ? "Your Turn" : "Robot Turn...")
-        : `Turn: Gamer ${localTurn}`;
+        : `Turn: Player ${localTurn === "X" ? "1 (X)" : "2 (O)"}`;
       highlightTurn = localTurn === "X";
     }
   }
@@ -369,6 +382,18 @@ export default function GameArea({
     if (!chatInput.trim()) return;
     onSendChat(chatInput.trim());
     setChatInput("");
+  };
+
+  const getSenderDisplayName = (sender: string) => {
+    if (mode === "online" && onlineRoom) {
+      if (sender === onlineRoom.state.playerX.username) {
+        return onlineRoom.state.playerX.uid === user?.uid ? "Player 1 (You)" : "Player 1";
+      }
+      if (onlineRoom.state.playerO && sender === onlineRoom.state.playerO.username) {
+        return onlineRoom.state.playerO.uid === user?.uid ? "Player 2 (You)" : "Player 2";
+      }
+    }
+    return sender;
   };
 
   const handleEmojiClick = (emoji: string) => {
@@ -425,15 +450,92 @@ export default function GameArea({
         {/* Playable Arena Column */}
         <div className="md:col-span-7 flex flex-col items-center">
           
+          {/* GORGEOUS PLAYER VS PLAYER CARD PANEL */}
+          <div className="w-full max-w-sm mb-4 bg-slate-900/60 border border-slate-850 rounded-2xl p-3 flex items-center justify-between shadow-md relative overflow-hidden">
+            {/* Background glows */}
+            <div className="absolute inset-0 pointer-events-none opacity-20">
+              <div className="absolute top-0 left-0 w-1/2 h-full bg-blue-500/10 blur-xl"></div>
+              <div className="absolute top-0 right-0 w-1/2 h-full bg-rose-500/10 blur-xl"></div>
+            </div>
+
+            {/* Player X Info */}
+            <div className={`flex-1 flex flex-col items-start min-w-0 z-10 p-2 rounded-xl border transition-all duration-200 ${isXActive ? "border-blue-500/35 bg-blue-500/5 shadow-[0_0_12px_rgba(59,130,246,0.15)]" : "border-transparent"}`}>
+              <div className="flex items-center gap-1.5 max-w-full">
+                <span className="text-[10px] font-black uppercase bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 rounded">X</span>
+                <span className="text-xs font-bold text-slate-200 truncate">
+                  {mode === "online"
+                    ? (onlineRoom?.state.playerX.uid === user?.uid ? "Player 1 (You)" : "Player 1")
+                    : "Player 1"}
+                </span>
+              </div>
+              <span className="text-[9px] text-slate-400 truncate mt-0.5 font-mono max-w-full">
+                {mode === "online" 
+                  ? onlineRoom?.state.playerX.username 
+                  : mode === "single" 
+                  ? user?.username 
+                  : "Local Play"}
+              </span>
+              {mode === "online" && (
+                <span className="text-[9px] text-blue-400 font-semibold mt-0.5">
+                  Elo: {onlineRoom?.state.playerX.rating}
+                </span>
+              )}
+            </div>
+
+            {/* VS Divider with central scores */}
+            <div className="flex flex-col items-center px-3 shrink-0 z-10">
+              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">VS</span>
+              {mode === "online" ? (
+                <div className="flex items-center gap-1 bg-slate-950 px-2 py-0.5 rounded-full border border-slate-850 text-[10px] font-bold text-slate-300 mt-1">
+                  <span>Score</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1 bg-slate-950 px-2.5 py-0.5 rounded-full border border-slate-800 text-[11px] font-black font-mono text-slate-350 mt-1">
+                  <span>{sessionWinsX}</span>
+                  <span className="text-slate-650">:</span>
+                  <span>{sessionWinsO}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Player O Info */}
+            <div className={`flex-1 flex flex-col items-end min-w-0 z-10 p-2 rounded-xl border transition-all duration-200 ${isOActive ? "border-rose-500/35 bg-rose-500/5 shadow-[0_0_12px_rgba(244,63,94,0.15)]" : "border-transparent"}`}>
+              <div className="flex items-center gap-1.5 max-w-full">
+                <span className="text-xs font-bold text-slate-200 truncate">
+                  {mode === "online"
+                    ? (onlineRoom?.state.playerO
+                        ? (onlineRoom.state.playerO.uid === user?.uid ? "Player 2 (You)" : "Player 2")
+                        : "Waiting...")
+                    : mode === "single"
+                    ? "Robot"
+                    : "Player 2"}
+                </span>
+                <span className="text-[10px] font-black uppercase bg-rose-500/10 text-rose-400 border border-rose-500/20 px-1.5 py-0.5 rounded">O</span>
+              </div>
+              <span className="text-[9px] text-slate-400 truncate mt-0.5 font-mono max-w-full">
+                {mode === "online" 
+                  ? (onlineRoom?.state.playerO?.username || "Connecting...") 
+                  : mode === "single" 
+                  ? `AI (${difficulty.toUpperCase()})` 
+                  : "Local Play"}
+              </span>
+              {mode === "online" && onlineRoom?.state.playerO && (
+                <span className="text-[9px] text-rose-400 font-semibold mt-0.5">
+                  Elo: {onlineRoom.state.playerO.rating}
+                </span>
+              )}
+            </div>
+          </div>
+
           {/* Active status Banner */}
           <div className="mb-4 text-center">
             <motion.h4
               animate={{ scale: highlightTurn ? [1, 1.03, 1] : 1 }}
               transition={{ repeat: Infinity, duration: 1.5 }}
-              className={`text-base font-bold tracking-tight rounded-full px-5 py-1.5 ${
+              className={`text-sm font-bold tracking-tight rounded-full px-5 py-1.5 ${
                 highlightTurn
                   ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400"
-                  : "text-slate-700 dark:text-slate-300"
+                  : "text-slate-700 dark:text-slate-350"
               }`}
             >
               {statusMessage}
@@ -530,7 +632,9 @@ export default function GameArea({
                       <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Waiting for opponent to accept rematch...</p>
                     ) : (
                       <div className="space-y-3">
-                        <p className="text-xs text-blue-700 dark:text-blue-300 font-semibold font-sans">Opponent requested a rematch!</p>
+                        <p className="text-xs text-blue-700 dark:text-blue-300 font-semibold font-sans">
+                          {onlineRoom.state.rematchRequestedBy === onlineRoom.state.playerX.uid ? "Player 1" : "Player 2"} requested a rematch!
+                        </p>
                         <button
                           id="accept-online-rematch-btn"
                           onClick={() => {
@@ -597,7 +701,7 @@ export default function GameArea({
                       }`}
                     >
                       <p className="text-[9px] font-bold text-slate-550 dark:text-slate-400">
-                        {msg.sender}
+                        {getSenderDisplayName(msg.sender)}
                       </p>
                       <p className="mt-0.5 leading-relaxed font-sans font-medium text-xs break-all text-slate-850 dark:text-slate-100">
                         {msg.content}

@@ -532,9 +532,19 @@ export default function App() {
                     Share Invitation Link
                   </button>
 
-                  <div className="flex items-center justify-center gap-2 text-[10px] text-slate-400 py-2">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
-                    <span>Waiting for opponent to connect...</span>
+                  <div className="flex flex-col gap-2 p-3 bg-slate-950/60 border border-slate-850 rounded-xl mt-2 text-left">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-400 font-medium">Player 1 (Host - You)</span>
+                      <span className="font-bold text-blue-400">{user?.username}</span>
+                    </div>
+                    <div className="border-t border-slate-900 my-1"></div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-400 font-medium flex items-center gap-1.5">
+                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-ping"></span>
+                        Player 2 (Guest)
+                      </span>
+                      <span className="font-semibold text-slate-500 italic">Waiting for connection...</span>
+                    </div>
                   </div>
                 </div>
               </motion.div>
