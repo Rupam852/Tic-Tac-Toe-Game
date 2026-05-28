@@ -593,13 +593,13 @@ export default function GameArea({
                       className={`max-w-[85%] rounded-xl px-3 py-1.5 ${
                         msg.sender === (user?.username || "Guest")
                           ? "ml-auto bg-blue-600 text-white"
-                          : "bg-slate-100 text-slate-800 dark:bg-[#0B1120] dark:text-slate-205"
+                          : "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100"
                       }`}
                     >
-                      <p className="text-[9px] opacity-75 font-semibold">
+                      <p className="text-[9px] font-bold text-slate-550 dark:text-slate-400">
                         {msg.sender}
                       </p>
-                      <p className="mt-0.5 leading-relaxed font-sans font-medium text-xs break-all">
+                      <p className="mt-0.5 leading-relaxed font-sans font-medium text-xs break-all text-slate-850 dark:text-slate-100">
                         {msg.content}
                       </p>
                     </div>
