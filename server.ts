@@ -386,9 +386,15 @@ async function startServer() {
             if (!state.rematchRequestedBy) {
               // First player requests rematch
               state.rematchRequestedBy = currentUserId;
+              
               broadcastToRoom(roomId, {
                 type: "rematch_request",
                 payload: { requesterUsername: currentUserId === state.playerX.uid ? state.playerX.username : state.playerO!.username }
+              });
+
+              broadcastToRoom(roomId, {
+                type: "room_updated",
+                payload: { room }
               });
             } else if (state.rematchRequestedBy !== currentUserId) {
               // Second player accepts rematch -> RESTART match
