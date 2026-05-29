@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect, useRef } from "react";
+import { App as CapApp } from "@capacitor/app";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Sliders,
@@ -27,14 +28,15 @@ import { User, UserSettings, GameRoom } from "./types";
 import { playSound } from "./utils/audio";
 import SettingsMenu from "./components/SettingsMenu";
 import GameArea from "./components/GameArea";
+import { safeLocalStorage, safeSessionStorage } from "./utils/storage";
 
 export default function App() {
   // Navigation & Mode States
   const [activeView, setActiveView] = useState<"landing" | "menu">(
-    () => (sessionStorage.getItem("active_view") as "landing" | "menu") || "landing"
+    () => (safeSessionStorage.getItem("active_view") as "landing" | "menu") || "landing"
   );
   const [activeGameMode, setActiveGameMode] = useState<"single" | "local" | "online" | null>(() => {
-    const saved = sessionStorage.getItem("active_game_mode");
+    const saved = safeSessionStorage.getItem("active_game_mode");
     if (saved === "single" || saved === "local") {
       return saved as "single" | "local";
     }
@@ -43,21 +45,17 @@ export default function App() {
 
   // Bot Difficulty Settings
   const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard">(
-    () => (sessionStorage.getItem("bot_difficulty") as "easy" | "medium" | "hard") || "easy"
+    () => (safeSessionStorage.getItem("bot_difficulty") as "easy" | "medium" | "hard") || "easy"
   );
   const [showDifficultyModal, setShowDifficultyModal] = useState(false);
 
   // Anonymous Guest Profile State
   const [user, setUser] = useState<User | null>(null);
 
-  // Platform State: Detect if running inside a native mobile wrapper
-  const [isNative, setIsNative] = useState(false);
-
-  useEffect(() => {
-    if (typeof window !== "undefined" && ((window as any).Capacitor || window.location.protocol === "file:")) {
-      setIsNative(true);
-    }
-  }, []);
+  // Platform State: Detect synchronously if running inside a native mobile wrapper
+  const [isNative] = useState(() => {
+    return typeof window !== "undefined" && (!!(window as any).Capacitor || window.location.protocol === "file:");
+  });
 
   // App Preference Settings
   const [settings, setSettings] = useState<UserSettings>({
@@ -99,26 +97,26 @@ export default function App() {
     } else {
       html.classList.remove("dark");
     }
-    localStorage.setItem("game_prefs", JSON.stringify(settings));
+    safeLocalStorage.setItem("game_prefs", JSON.stringify(settings));
   }, [settings]);
 
   // Sync activeView to sessionStorage
   useEffect(() => {
-    sessionStorage.setItem("active_view", activeView);
+    safeSessionStorage.setItem("active_view", activeView);
   }, [activeView]);
 
   // Sync activeGameMode to sessionStorage
   useEffect(() => {
     if (activeGameMode) {
-      sessionStorage.setItem("active_game_mode", activeGameMode);
+      safeSessionStorage.setItem("active_game_mode", activeGameMode);
     } else {
-      sessionStorage.removeItem("active_game_mode");
+      safeSessionStorage.removeItem("active_game_mode");
     }
   }, [activeGameMode]);
 
   // Sync difficulty to sessionStorage
   useEffect(() => {
-    sessionStorage.setItem("bot_difficulty", difficulty);
+    safeSessionStorage.setItem("bot_difficulty", difficulty);
   }, [difficulty]);
 
   // Synchronize history states for standard back button & popstate navigation
@@ -160,7 +158,6 @@ export default function App() {
     
     const setupNativeBack = async () => {
       try {
-        const { App: CapApp } = await import("@capacitor/app");
         appBackButtonListener = await CapApp.addListener("backButton", () => {
           if (activeGameMode !== null) {
             // Exit match back to lobby
@@ -213,7 +210,12 @@ export default function App() {
   useEffect(() => {
     let appUrlListener: any;
 
-    const handleIncomingDeepLinkUrl = (url: string) => {
+    const handleIncomingDeepLinkUrl = (url: any) => {
+      if (!url || typeof url !== "string") {
+        console.log("[Deep Link] Warning: handleIncomingDeepLinkUrl received invalid URL:", url);
+        return;
+      }
+
       let roomCode: string | null = null;
 
       try {
@@ -229,9 +231,18 @@ export default function App() {
           }
         }
       } catch (e) {
-        const match = url.match(/[?&]room=([^&]+)/) || url.match(/tictactoe:\/\/(?:room\/)?([A-Z0-9]{6})/i);
-        if (match) {
-          roomCode = match[1];
+        console.error("[Deep Link] Error parsing URL via new URL():", e);
+      }
+
+      // Fallback to regex matching if standard parsing didn't find roomCode
+      if (!roomCode) {
+        try {
+          const match = url.match(/[?&]room=([^&]+)/) || url.match(/tictactoe:\/\/(?:room\/)?([A-Z0-9]{6})/i);
+          if (match) {
+            roomCode = match[1];
+          }
+        } catch (matchErr) {
+          console.error("[Deep Link] Error parsing URL via regex fallback:", matchErr);
         }
       }
 
@@ -244,12 +255,10 @@ export default function App() {
 
     const setupDeepLinks = async () => {
       try {
-        const { App: CapApp } = await import("@capacitor/app");
-        
         // 1. Handle deep link clicked while app is already running/backgrounded
         appUrlListener = await CapApp.addListener("appUrlOpen", (data: any) => {
-          console.log("[Deep Link] App opened with URL:", data.url);
-          handleIncomingDeepLinkUrl(data.url);
+          console.log("[Deep Link] App opened with URL:", data?.url);
+          handleIncomingDeepLinkUrl(data?.url);
         });
 
         // 2. Handle deep link that launched the app from a completely closed state
@@ -317,14 +326,14 @@ export default function App() {
 
   // Load Saved Preferences and Initialize Guest Profile on Mount
   useEffect(() => {
-    const savedPrefs = localStorage.getItem("game_prefs");
+    const savedPrefs = safeLocalStorage.getItem("game_prefs");
     if (savedPrefs) {
       try {
         setSettings(JSON.parse(savedPrefs));
       } catch (e) {}
     }
 
-    let savedUser = localStorage.getItem("game_user");
+    let savedUser = safeLocalStorage.getItem("game_user");
     if (!savedUser) {
       const guestNum = Math.floor(1000 + Math.random() * 9000);
       const randomId = "u_" + Math.random().toString(36).substring(2, 11);
@@ -339,7 +348,7 @@ export default function App() {
         twoFactorEnabled: false,
         createdAt: new Date().toISOString()
       };
-      localStorage.setItem("game_user", JSON.stringify(initialGuest));
+      safeLocalStorage.setItem("game_user", JSON.stringify(initialGuest));
       setUser(initialGuest);
     } else {
       try {
@@ -355,7 +364,7 @@ export default function App() {
           losses: 0,
           draws: 0
         } as any;
-        localStorage.setItem("game_user", JSON.stringify(initialGuest));
+        safeLocalStorage.setItem("game_user", JSON.stringify(initialGuest));
         setUser(initialGuest);
       }
     }
@@ -467,7 +476,7 @@ export default function App() {
             case "user_updated":
               if (payload.user) {
                 setUser(payload.user);
-                localStorage.setItem("game_user", JSON.stringify(payload.user));
+                safeLocalStorage.setItem("game_user", JSON.stringify(payload.user));
               }
               break;
 

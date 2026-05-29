@@ -3,11 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { ArrowLeft, RotateCcw, Monitor, Users, Globe, Send, MessageCircleCode, Smile } from "lucide-react";
 import { BoardState, GameState, User } from "../types";
 import { playSound } from "../utils/audio";
+import { safeSessionStorage } from "../utils/storage";
 
 interface GameAreaProps {
   mode: "single" | "local" | "online";
@@ -130,31 +131,31 @@ export default function GameArea({
 }: GameAreaProps) {
   // Local (and Robot) Game State
   const [localBoard, setLocalBoard] = useState<BoardState>(() => {
-    const saved = sessionStorage.getItem("local_board");
+    const saved = safeSessionStorage.getItem("local_board");
     return saved ? JSON.parse(saved) : Array(9).fill(null);
   });
   const [localTurn, setLocalTurn] = useState<"X" | "O">(
-    () => (sessionStorage.getItem("local_turn") as "X" | "O") || "X"
+    () => (safeSessionStorage.getItem("local_turn") as "X" | "O") || "X"
   );
   const [localWinner, setLocalWinner] = useState<string | null>(
-    () => sessionStorage.getItem("local_winner") || null
+    () => safeSessionStorage.getItem("local_winner") || null
   ); // "X", "O", "draw", or null
   const [localWinningLine, setLocalWinningLine] = useState<number[] | null>(() => {
-    const saved = sessionStorage.getItem("local_winning_line");
+    const saved = safeSessionStorage.getItem("local_winning_line");
     return saved ? JSON.parse(saved) : null;
   });
   
   // Scoreboard tracking for current session
   const [sessionWinsX, setSessionWinsX] = useState(() => {
-    const saved = sessionStorage.getItem("session_wins_x");
+    const saved = safeSessionStorage.getItem("session_wins_x");
     return saved ? parseInt(saved, 10) : 0;
   });
   const [sessionWinsO, setSessionWinsO] = useState(() => {
-    const saved = sessionStorage.getItem("session_wins_o");
+    const saved = safeSessionStorage.getItem("session_wins_o");
     return saved ? parseInt(saved, 10) : 0;
   });
   const [sessionDraws, setSessionDraws] = useState(() => {
-    const saved = sessionStorage.getItem("session_draws");
+    const saved = safeSessionStorage.getItem("session_draws");
     return saved ? parseInt(saved, 10) : 0;
   });
 
@@ -166,29 +167,29 @@ export default function GameArea({
   const [isExpired, setIsExpired] = useState<boolean>(false);
 
   const clearSessionStorage = () => {
-    sessionStorage.removeItem("local_board");
-    sessionStorage.removeItem("local_turn");
-    sessionStorage.removeItem("local_winner");
-    sessionStorage.removeItem("local_winning_line");
+    safeSessionStorage.removeItem("local_board");
+    safeSessionStorage.removeItem("local_turn");
+    safeSessionStorage.removeItem("local_winner");
+    safeSessionStorage.removeItem("local_winning_line");
   };
 
   // Sync board state & scores to sessionStorage
   useEffect(() => {
-    sessionStorage.setItem("local_board", JSON.stringify(localBoard));
-    sessionStorage.setItem("local_turn", localTurn);
+    safeSessionStorage.setItem("local_board", JSON.stringify(localBoard));
+    safeSessionStorage.setItem("local_turn", localTurn);
     if (localWinner) {
-      sessionStorage.setItem("local_winner", localWinner);
+      safeSessionStorage.setItem("local_winner", localWinner);
     } else {
-      sessionStorage.removeItem("local_winner");
+      safeSessionStorage.removeItem("local_winner");
     }
     if (localWinningLine) {
-      sessionStorage.setItem("local_winning_line", JSON.stringify(localWinningLine));
+      safeSessionStorage.setItem("local_winning_line", JSON.stringify(localWinningLine));
     } else {
-      sessionStorage.removeItem("local_winning_line");
+      safeSessionStorage.removeItem("local_winning_line");
     }
-    sessionStorage.setItem("session_wins_x", sessionWinsX.toString());
-    sessionStorage.setItem("session_wins_o", sessionWinsO.toString());
-    sessionStorage.setItem("session_draws", sessionDraws.toString());
+    safeSessionStorage.setItem("session_wins_x", sessionWinsX.toString());
+    safeSessionStorage.setItem("session_wins_o", sessionWinsO.toString());
+    safeSessionStorage.setItem("session_draws", sessionDraws.toString());
   }, [localBoard, localTurn, localWinner, localWinningLine, sessionWinsX, sessionWinsO, sessionDraws]);
 
   // 10-Minute Countdown Timer for Online Rooms
@@ -258,11 +259,25 @@ export default function GameArea({
       setLocalWinningLine(check.line);
       if (check.winner === "draw") {
         setSessionDraws((d) => d + 1);
-        playSound("draw", soundVolume);
+        setTimeout(() => {
+          playSound("draw", soundVolume);
+        }, 300);
       } else {
-        if (check.winner === "X") setSessionWinsX((w) => w + 1);
-        else setSessionWinsO((w) => w + 1);
-        playSound("win", soundVolume);
+        if (check.winner === "X") {
+          setSessionWinsX((w) => w + 1);
+          setTimeout(() => {
+            playSound("win", soundVolume);
+          }, 300);
+        } else {
+          setSessionWinsO((w) => w + 1);
+          setTimeout(() => {
+            if (mode === "single") {
+              playSound("lose", soundVolume);
+            } else {
+              playSound("win", soundVolume);
+            }
+          }, 300);
+        }
       }
     } else {
       setLocalTurn(currentSymbol === "X" ? "O" : "X");
@@ -304,10 +319,14 @@ export default function GameArea({
         setLocalWinningLine(check.line);
         if (check.winner === "draw") {
           setSessionDraws((d) => d + 1);
-          playSound("draw", soundVolume);
+          setTimeout(() => {
+            playSound("draw", soundVolume);
+          }, 300);
         } else {
           setSessionWinsO((w) => w + 1);
-          playSound("win", soundVolume);
+          setTimeout(() => {
+            playSound("lose", soundVolume);
+          }, 300);
         }
       } else {
         setLocalTurn("X");
@@ -316,6 +335,33 @@ export default function GameArea({
 
     return () => clearTimeout(timer);
   }, [localTurn, localWinner, mode, localBoard, difficulty]);
+
+  // Online Mode outcome transition listener
+  const lastOnlineStatusRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (mode !== "online" || !onlineRoom) {
+      lastOnlineStatusRef.current = null;
+      return;
+    }
+
+    const currentStatus = onlineRoom.state.status;
+    const prevStatus = lastOnlineStatusRef.current;
+    
+    if (currentStatus === "ended" && prevStatus && prevStatus !== "ended") {
+      const winner = onlineRoom.state.winner;
+      setTimeout(() => {
+        if (winner === "draw") {
+          playSound("draw", soundVolume);
+        } else if (winner === user?.uid) {
+          playSound("win", soundVolume);
+        } else {
+          playSound("lose", soundVolume);
+        }
+      }, 300);
+    }
+
+    lastOnlineStatusRef.current = currentStatus;
+  }, [mode, onlineRoom, soundVolume, user?.uid]);
 
   // Online game status mappings
   const isOnlineWin = mode === "online" && onlineRoom?.state.status === "ended";
@@ -412,9 +458,9 @@ export default function GameArea({
             playSound("click", soundVolume);
             clearSessionStorage();
             // Also let's clear the persistent session wins
-            sessionStorage.removeItem("session_wins_x");
-            sessionStorage.removeItem("session_wins_o");
-            sessionStorage.removeItem("session_draws");
+            safeSessionStorage.removeItem("session_wins_x");
+            safeSessionStorage.removeItem("session_wins_o");
+            safeSessionStorage.removeItem("session_draws");
             onExit();
           }}
           className="flex items-center gap-1 sm:gap-1.5 rounded-xl border border-slate-200 px-2.5 sm:px-4 py-1.5 sm:py-2 text-[11px] sm:text-xs font-semibold text-slate-600 dark:border-slate-800 dark:text-slate-300 transition-all hover:bg-slate-50 dark:hover:bg-slate-900 hover:scale-[1.03] active:scale-[0.97] duration-155 whitespace-nowrap shrink-0"

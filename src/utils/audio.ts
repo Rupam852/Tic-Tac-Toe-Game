@@ -16,7 +16,7 @@ function getAudioContext(): AudioContext {
   return audioCtx;
 }
 
-export function playSound(type: "click" | "place" | "win" | "draw" | "error" | "challenge", volume = 0.5) {
+export function playSound(type: "click" | "place" | "win" | "lose" | "draw" | "error" | "challenge", volume = 0.5) {
   if (volume <= 0) return;
   try {
     const ctx = getAudioContext();
@@ -61,6 +61,20 @@ export function playSound(type: "click" | "place" | "win" | "draw" | "error" | "
         gain.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
         osc.start(now);
         osc.stop(now + 0.6);
+        break;
+
+      case "lose":
+        // Descending minor theme (sad/lose sound)
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(392.00, now); // G4
+        osc.frequency.setValueAtTime(311.13, now + 0.15); // Eb4
+        osc.frequency.setValueAtTime(261.63, now + 0.3); // C4
+        osc.frequency.setValueAtTime(246.94, now + 0.45); // B3
+        gain.gain.setValueAtTime(volume * 0.6, now);
+        gain.gain.linearRampToValueAtTime(volume * 0.6, now + 0.45);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.75);
+        osc.start(now);
+        osc.stop(now + 0.75);
         break;
 
       case "draw":
