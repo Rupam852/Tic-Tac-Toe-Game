@@ -291,6 +291,29 @@ export default function App() {
     }
   }, [socket, deepLinkRoomCode]);
 
+  // Automatic native app redirect helper for mobile browser visitors
+  useEffect(() => {
+    if (!isNative && typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const queryRoomCode = params.get("room");
+      if (queryRoomCode && queryRoomCode.trim()) {
+        const cleanCode = queryRoomCode.trim().toUpperCase();
+        
+        // Detect if user is on a mobile device (Android/iOS)
+        const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        
+        if (isMobileDevice) {
+          console.log(`[Web Redirect] Mobile browser visitor. Redirecting to native scheme: tictactoe://room/${cleanCode}`);
+          
+          addToast("Launching native Tic-Tac-Toe App...", "info");
+          
+          // Trigger custom scheme redirection
+          window.location.href = `tictactoe://room/${cleanCode}`;
+        }
+      }
+    }
+  }, [isNative]);
+
 
   // Load Saved Preferences and Initialize Guest Profile on Mount
   useEffect(() => {
