@@ -166,6 +166,14 @@ export default function GameArea({
   const [timeLeft, setTimeLeft] = useState<string>("");
   const [isExpired, setIsExpired] = useState<boolean>(false);
 
+  // Chat auto-scroll reference and listener
+  const chatBottomRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (chatBottomRef.current) {
+      chatBottomRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [chatMessages]);
+
   const clearSessionStorage = () => {
     safeSessionStorage.removeItem("local_board");
     safeSessionStorage.removeItem("local_turn");
@@ -794,6 +802,7 @@ export default function GameArea({
                   );
                 })
               )}
+              <div ref={chatBottomRef} />
             </div>
 
             {/* Emoji and taunts triggers row */}

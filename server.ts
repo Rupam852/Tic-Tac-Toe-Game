@@ -533,34 +533,37 @@ async function startServer() {
     ws.on("close", () => {
       console.log(`[WS Close] Connection closed for currentUserId: "${currentUserId}"`);
       if (currentUserId) {
-        activeSockets.delete(currentUserId);
+        const currentMapping = activeSockets.get(currentUserId);
+        if (currentMapping && currentMapping.socket === ws) {
+          activeSockets.delete(currentUserId);
 
-        // Handle active online room termination upon disconnect
-        for (const [roomId, room] of activeRooms.entries()) {
-          if (room.state.playerX.uid === currentUserId || (room.state.playerO && room.state.playerO.uid === currentUserId)) {
-            // Forfeit or inform the opposite player
-            const notifyUid = room.state.playerX.uid === currentUserId ? (room.state.playerO?.uid) : room.state.playerX.uid;
-            if (notifyUid) {
-              const oppSocket = activeSockets.get(notifyUid);
-              if (oppSocket) {
-                oppSocket.socket.send(JSON.stringify({
-                  type: "opponent_disconnected",
-                  payload: { message: "Opponent disconnected from room." }
-                }));
+          // Handle active online room termination upon disconnect
+          for (const [roomId, room] of activeRooms.entries()) {
+            if (room.state.playerX.uid === currentUserId || (room.state.playerO && room.state.playerO.uid === currentUserId)) {
+              // Forfeit or inform the opposite player
+              const notifyUid = room.state.playerX.uid === currentUserId ? (room.state.playerO?.uid) : room.state.playerX.uid;
+              if (notifyUid) {
+                const oppSocket = activeSockets.get(notifyUid);
+                if (oppSocket) {
+                  oppSocket.socket.send(JSON.stringify({
+                    type: "opponent_disconnected",
+                    payload: { message: "Opponent disconnected from room." }
+                  }));
+                }
               }
+              // Clear auto-expiry timer
+              const timer = roomTimers.get(roomId);
+              if (timer) {
+                clearTimeout(timer);
+                roomTimers.delete(roomId);
+              }
+              activeRooms.delete(roomId);
             }
-            // Clear auto-expiry timer
-            const timer = roomTimers.get(roomId);
-            if (timer) {
-              clearTimeout(timer);
-              roomTimers.delete(roomId);
-            }
-            activeRooms.delete(roomId);
           }
+          
+          // Push updated state of online lobby count to all clients in real-time
+          broadcastLobbyInfo();
         }
-        
-        // Push updated state of online lobby count to all clients in real-time
-        broadcastLobbyInfo();
       }
     });
   });

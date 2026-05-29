@@ -154,11 +154,12 @@ export default function App() {
 
   // Synchronize native Android / Capacitor back button gestures
   useEffect(() => {
-    let appBackButtonListener: any;
+    let appBackButtonListener: any = null;
+    let isCleanedUp = false;
     
     const setupNativeBack = async () => {
       try {
-        appBackButtonListener = await CapApp.addListener("backButton", () => {
+        const listener = await CapApp.addListener("backButton", () => {
           if (activeGameMode !== null) {
             // Exit match back to lobby
             playSound("click", settings.soundVolume);
@@ -181,6 +182,12 @@ export default function App() {
             CapApp.exitApp();
           }
         });
+
+        if (isCleanedUp) {
+          listener.remove();
+        } else {
+          appBackButtonListener = listener;
+        }
       } catch (err) {
         console.log("Capacitor App plugin not loaded - fallback to popstate engine", err);
       }
@@ -189,6 +196,7 @@ export default function App() {
     setupNativeBack();
     
     return () => {
+      isCleanedUp = true;
       if (appBackButtonListener) {
         appBackButtonListener.remove();
       }
@@ -208,7 +216,8 @@ export default function App() {
 
   // Listen for native deep linking URL activations (Capacitor appUrlOpen event)
   useEffect(() => {
-    let appUrlListener: any;
+    let appUrlListener: any = null;
+    let isCleanedUp = false;
 
     const handleIncomingDeepLinkUrl = (url: any) => {
       if (!url || typeof url !== "string") {
@@ -256,14 +265,20 @@ export default function App() {
     const setupDeepLinks = async () => {
       try {
         // 1. Handle deep link clicked while app is already running/backgrounded
-        appUrlListener = await CapApp.addListener("appUrlOpen", (data: any) => {
+        const listener = await CapApp.addListener("appUrlOpen", (data: any) => {
           console.log("[Deep Link] App opened with URL:", data?.url);
           handleIncomingDeepLinkUrl(data?.url);
         });
 
+        if (isCleanedUp) {
+          listener.remove();
+        } else {
+          appUrlListener = listener;
+        }
+
         // 2. Handle deep link that launched the app from a completely closed state
         const launchData = await CapApp.getLaunchUrl();
-        if (launchData && launchData.url) {
+        if (launchData && launchData.url && !isCleanedUp) {
           console.log("[Deep Link] App launched with URL:", launchData.url);
           handleIncomingDeepLinkUrl(launchData.url);
         }
@@ -275,6 +290,7 @@ export default function App() {
     setupDeepLinks();
 
     return () => {
+      isCleanedUp = true;
       if (appUrlListener) {
         appUrlListener.remove();
       }
@@ -378,11 +394,17 @@ export default function App() {
     const socketUrl = backendUrl.replace(/^http/, "ws") + "/ws";
 
     let ws: WebSocket;
+    let isCleanedUp = false;
 
     const connectWS = () => {
+      if (isCleanedUp) return;
       ws = new WebSocket(socketUrl);
 
       ws.onopen = () => {
+        if (isCleanedUp) {
+          ws.close();
+          return;
+        }
         setSocket(ws);
         console.log("WebSocket connection established with gaming backend");
         
@@ -403,7 +425,7 @@ export default function App() {
 
           // Tiny buffer to let server finalize registration mapping
           setTimeout(() => {
-            if (ws.readyState === WebSocket.OPEN) {
+            if (ws.readyState === WebSocket.OPEN && !isCleanedUp) {
               ws.send(JSON.stringify({
                 type: "join_room",
                 payload: { code: cleanCode }
@@ -414,6 +436,7 @@ export default function App() {
       };
 
       ws.onmessage = (event) => {
+        if (isCleanedUp) return;
         try {
           const message = JSON.parse(event.data);
           const { type, payload } = message;
@@ -492,7 +515,9 @@ export default function App() {
 
       ws.onclose = () => {
         setSocket(null);
-        socketReconnectTimer.current = setTimeout(connectWS, 4000);
+        if (!isCleanedUp) {
+          socketReconnectTimer.current = setTimeout(connectWS, 4000);
+        }
       };
 
       ws.onerror = (e) => {
@@ -503,7 +528,11 @@ export default function App() {
     connectWS();
 
     return () => {
-      if (ws) ws.close();
+      isCleanedUp = true;
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
+      }
       if (socketReconnectTimer.current) clearTimeout(socketReconnectTimer.current);
     };
   }, [user?.uid]);
