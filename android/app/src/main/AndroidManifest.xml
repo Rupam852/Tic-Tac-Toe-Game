@@ -22,6 +22,25 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Intent filter for custom URL scheme (e.g. tictactoe://room/CODE) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="tictactoe" />
+            </intent-filter>
+
+            <!-- Intent filter for App Links / Universal Links (e.g. https://tic-tac-toe-gamego.vercel.app/?room=CODE) -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+                <data android:host="tic-tac-toe-game-wtl2.onrender.com" />
+                <data android:host="tic-tac-toe-gamego.vercel.app" />
+            </intent-filter>
+
         </activity>
 
         <provider

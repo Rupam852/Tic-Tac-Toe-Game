@@ -75,6 +75,7 @@ export default function App() {
   const [onlineRoom, setOnlineRoom] = useState<GameRoom | null>(null);
   const [onlineSymbol, setOnlineSymbol] = useState<"X" | "O" | null>(null);
   const [joiningCode, setJoiningCode] = useState("");
+  const [deepLinkRoomCode, setDeepLinkRoomCode] = useState("");
   const [lobbyOnlineCount, setLobbyOnlineCount] = useState(1);
   const [chatMessages, setChatMessages] = useState<{ sender: string; content: string; time: number }[]>([]);
   const [showPrivateRoomModal, setShowPrivateRoomModal] = useState(false);
@@ -207,6 +208,76 @@ export default function App() {
       window.history.pushState({ state: "game" }, "");
     }
   }, [activeView, activeGameMode]);
+
+  // Listen for native deep linking URL activations (Capacitor appUrlOpen event)
+  useEffect(() => {
+    let appUrlListener: any;
+
+    const setupDeepLinks = async () => {
+      try {
+        const { App: CapApp } = await import("@capacitor/app");
+        appUrlListener = await CapApp.addListener("appUrlOpen", (data: any) => {
+          console.log("[Deep Link] App opened with URL:", data.url);
+
+          let roomCode: string | null = null;
+
+          try {
+            const parsedUrl = new URL(data.url);
+            if (parsedUrl.searchParams.has("room")) {
+              roomCode = parsedUrl.searchParams.get("room");
+            } else {
+              const pathParts = parsedUrl.pathname.split("/").filter(Boolean);
+              if (pathParts.length > 0) {
+                roomCode = pathParts[pathParts.length - 1];
+              } else if (parsedUrl.host && parsedUrl.host !== "localhost") {
+                roomCode = parsedUrl.host;
+              }
+            }
+          } catch (e) {
+            const match = data.url.match(/[?&]room=([^&]+)/) || data.url.match(/tictactoe:\/\/(?:room\/)?([A-Z0-9]{6})/i);
+            if (match) {
+              roomCode = match[1];
+            }
+          }
+
+          if (roomCode) {
+            const cleanCode = roomCode.trim().toUpperCase();
+            console.log(`[Deep Link Auto-Join] Extracted room code: ${cleanCode}`);
+            setDeepLinkRoomCode(cleanCode);
+          }
+        });
+      } catch (err) {
+        console.log("Capacitor App plugin not available for deep linking in browser", err);
+      }
+    };
+
+    setupDeepLinks();
+
+    return () => {
+      if (appUrlListener) {
+        appUrlListener.remove();
+      }
+    };
+  }, []);
+
+  // Dynamic Deep Link Join Handler once socket becomes open
+  useEffect(() => {
+    if (socket && socket.readyState === WebSocket.OPEN && deepLinkRoomCode.trim()) {
+      const cleanCode = deepLinkRoomCode.trim().toUpperCase();
+      console.log(`[Deep Link Auto-Join] Executing socket room join for: ${cleanCode}`);
+      
+      setDeepLinkRoomCode("");
+      
+      setTimeout(() => {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({
+            type: "join_room",
+            payload: { code: cleanCode }
+          }));
+        }
+      }, 200);
+    }
+  }, [socket, deepLinkRoomCode]);
 
 
   // Load Saved Preferences and Initialize Guest Profile on Mount
