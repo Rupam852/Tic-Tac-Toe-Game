@@ -243,10 +243,10 @@ export default function GameArea({
     setLocalWinningLine(null);
     clearSessionStorage();
 
-    // Randomize difficulty again for single player rematch
+    // Randomize difficulty again for single player rematch (55% easy, 30% medium, 15% hard)
     if (mode === "single") {
-      const difficulties = ["easy", "medium", "hard"] as const;
-      const randomDiff = difficulties[Math.floor(Math.random() * difficulties.length)];
+      const rand = Math.random();
+      const randomDiff = rand < 0.55 ? "easy" : rand < 0.85 ? "medium" : "hard";
       setCurrentDifficulty(randomDiff);
     }
   };
@@ -321,7 +321,14 @@ export default function GameArea({
         const randomIdx = Math.floor(Math.random() * availableCells.length);
         chosenIndex = availableCells[randomIdx];
       } else if (currentDifficulty === "medium") {
-        chosenIndex = getMediumMove(localBoard);
+        // Medium mode has a 30% chance of making a mistake (playing a random move)
+        const makeMistake = Math.random() < 0.3;
+        if (makeMistake) {
+          const randomIdx = Math.floor(Math.random() * availableCells.length);
+          chosenIndex = availableCells[randomIdx];
+        } else {
+          chosenIndex = getMediumMove(localBoard);
+        }
       } else {
         const best = minimax(localBoard, 0, true);
         chosenIndex = best.index !== undefined ? best.index : availableCells[0];

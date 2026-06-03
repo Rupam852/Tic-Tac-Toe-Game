@@ -975,12 +975,13 @@ export default function App() {
                            Train offline against Easy, Medium heuristics, or an unbeatable recursive Minimax Hard bot.
                         </p>
                       </div>
-                      <button
+                       <button
                         onClick={() => {
                           playSound("click", settings.soundVolume);
-                          const difficulties = ["easy", "medium", "hard"] as const;
-                          const randomDiff = difficulties[Math.floor(Math.random() * difficulties.length)];
-                          setDifficulty(randomDiff);
+                          // Skewed probability: 55% easy, 30% medium, 15% hard
+                          const rand = Math.random();
+                          const selectedDiff = rand < 0.55 ? "easy" : rand < 0.85 ? "medium" : "hard";
+                          setDifficulty(selectedDiff);
                           setActiveGameMode("single");
                         }}
                         className="mt-6 w-full rounded-xl bg-slate-100 dark:bg-slate-950 py-3 text-xs font-bold text-blue-500 dark:text-blue-400 border border-slate-200 dark:border-slate-850 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white transition-all hover:scale-[1.02] active:scale-[0.98] duration-150 flex items-center justify-center gap-1.5 shadow-sm"
