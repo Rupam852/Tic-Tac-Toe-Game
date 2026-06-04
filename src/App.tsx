@@ -53,7 +53,11 @@ export default function App() {
 
   // Platform State: Detect synchronously if running inside a native mobile wrapper
   const [isNative] = useState(() => {
-    return typeof window !== "undefined" && (!!(window as any).Capacitor || window.location.protocol === "file:");
+    if (typeof window === "undefined") return false;
+    const cap = (window as any).Capacitor;
+    const platform = cap ? (typeof cap.getPlatform === "function" ? cap.getPlatform() : cap.platform) : null;
+    const isCapNative = !!platform && platform !== "web";
+    return isCapNative || window.location.protocol === "file:";
   });
 
   // App Preference Settings
