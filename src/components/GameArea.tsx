@@ -116,6 +116,30 @@ function getMediumMove(board: BoardState): number {
   return openCells[Math.floor(Math.random() * openCells.length)];
 }
 
+function getBlunderMove(board: BoardState): number {
+  // Deliberately ignore winning/blocking. Just try to play standard positional moves:
+  // 1. Play center if open (50% chance to take it, to keep it human-like)
+  if (board[4] === null && Math.random() < 0.5) return 4;
+
+  // 2. Play any open corner
+  const corners = [0, 2, 6, 8];
+  const openCorners = corners.filter((c) => board[c] === null);
+  if (openCorners.length > 0 && Math.random() < 0.7) {
+    return openCorners[Math.floor(Math.random() * openCorners.length)];
+  }
+
+  // 3. Play any open edge/side
+  const edges = [1, 3, 5, 7];
+  const openEdges = edges.filter((e) => board[e] === null);
+  if (openEdges.length > 0) {
+    return openEdges[Math.floor(Math.random() * openEdges.length)];
+  }
+
+  // 4. Fallback to any random open cell
+  const openCells = board.map((v, i) => v === null ? i : null).filter((v) => v !== null) as number[];
+  return openCells[Math.floor(Math.random() * openCells.length)];
+}
+
 export default function GameArea({
   mode,
   user,
@@ -319,11 +343,22 @@ export default function GameArea({
         const randomIdx = Math.floor(Math.random() * availableCells.length);
         chosenIndex = availableCells[randomIdx];
       } else if (currentDifficulty === "medium") {
-        // Medium mode has a 55% chance of making a mistake (playing a random move) so user wins most of the time
-        const makeMistake = Math.random() < 0.55;
+        // Adaptive mistake rate (Dynamic rubber-banding) based on session wins/losses
+        let mistakeRate = 0.45; // base mistake rate
+        const scoreDifference = sessionWinsO - sessionWinsX; // positive means bot is leading
+        
+        if (scoreDifference > 0) {
+          // Bot is winning/leading, make it easier (increase mistake rate)
+          mistakeRate = Math.min(0.85, 0.45 + scoreDifference * 0.15);
+        } else if (scoreDifference < 0) {
+          // Bot is losing, make it more challenging (decrease mistake rate)
+          mistakeRate = Math.max(0.25, 0.45 + scoreDifference * 0.10); // scoreDifference is negative
+        }
+
+        const makeMistake = Math.random() < mistakeRate;
         if (makeMistake) {
-          const randomIdx = Math.floor(Math.random() * availableCells.length);
-          chosenIndex = availableCells[randomIdx];
+          // NATURAL BLUNDER: play standard positional moves but deliberately skip checks for wins/blocks
+          chosenIndex = getBlunderMove(localBoard);
         } else {
           chosenIndex = getMediumMove(localBoard);
         }
@@ -359,7 +394,7 @@ export default function GameArea({
     }, 600); // realistic slight response lag for AI
 
     return () => clearTimeout(timer);
-  }, [localTurn, localWinner, mode, localBoard, currentDifficulty]);
+  }, [localTurn, localWinner, mode, localBoard, currentDifficulty, sessionWinsO, sessionWinsX, soundVolume]);
 
   // Online Mode outcome transition listener
   const lastOnlineStatusRef = useRef<string | null>(null);
