@@ -703,19 +703,7 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-3">
-            {!isNative && activeGameMode === null && (
-              <a
-                href="https://drive.google.com/file/d/1LrohWAKAXzV3FEQ6YdeHi_7qZmP8F_WB/view?usp=sharing"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 rounded-xl border border-blue-200 dark:border-blue-800/85 bg-blue-50/50 dark:bg-slate-900/60 p-2.5 text-[10px] sm:text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 hover:scale-[1.05] active:scale-[0.95] transition-all shadow-xs cursor-pointer"
-                title="Download Android App"
-              >
-                <Download className="h-4.5 w-4.5 text-blue-550 dark:text-blue-400" />
-                <span className="hidden sm:inline">Download APK</span>
-                <span className="inline sm:hidden font-black">APK</span>
-              </a>
-            )}
+
 
             {activeView !== "landing" && (
               <button
