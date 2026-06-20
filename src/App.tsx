@@ -539,6 +539,8 @@ export default function App() {
       }
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener("pagehide", handleBeforeUnload);
+    window.addEventListener("unload", handleBeforeUnload);
 
     const setupAppStateListener = async () => {
       try {
@@ -573,6 +575,8 @@ export default function App() {
     return () => {
       isCleanedUp = true;
       window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("pagehide", handleBeforeUnload);
+      window.removeEventListener("unload", handleBeforeUnload);
       appStateListenerPromise.then((l) => {
         if (l) l.remove();
       });

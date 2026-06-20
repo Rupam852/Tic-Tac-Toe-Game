@@ -119,7 +119,7 @@ async function startServer() {
     });
   };
 
-  // Stale connection cleanup: Ping all connected WebSocket clients every 3 seconds to flush inactive apps
+  // Stale connection cleanup: Ping all connected WebSocket clients every 1.5 seconds to flush inactive apps
   const heartbeatInterval = setInterval(() => {
     wss.clients.forEach((ws: any) => {
       if (ws.isAlive === false) {
@@ -129,7 +129,7 @@ async function startServer() {
       ws.isAlive = false;
       ws.ping();
     });
-  }, 3000);
+  }, 1500);
 
   wss.on("connection", (ws: any) => {
     console.log("[WS Connection] A new client has connected to the WebSocket server");
