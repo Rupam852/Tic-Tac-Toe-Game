@@ -37,7 +37,7 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="http" />
                 <data android:scheme="https" />
-                <data android:host="tic-tac-toe-game-wtl2.onrender.com" />
+                <data android:host="tic-tac-toe-game-whyj.onrender.com" />
                 <data android:host="tic-tac-toe-gamego.vercel.app" />
             </intent-filter>
 

@@ -617,7 +617,7 @@ export default function App() {
 
     const baseUrl = (typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1")
       ? window.location.origin
-      : "https://tic-tac-toe-game-wtl2.onrender.com";
+      : "https://tic-tac-toe-game-whyj.onrender.com";
 
     const webUrl = `${baseUrl}?room=${onlineRoom.code}`;
     const appUrl = `tictactoe://room/${onlineRoom.code}`;
