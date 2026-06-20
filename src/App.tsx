@@ -82,6 +82,11 @@ export default function App() {
   const [showPrivateRoomModal, setShowPrivateRoomModal] = useState(false);
 
   const socketReconnectTimer = useRef<NodeJS.Timeout | null>(null);
+  const activeGameModeRef = useRef(activeGameMode);
+
+  useEffect(() => {
+    activeGameModeRef.current = activeGameMode;
+  }, [activeGameMode]);
 
   // Toast helper function
   const addToast = (text: string, type: "success" | "error" | "info" = "info") => {
@@ -535,11 +540,42 @@ export default function App() {
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
 
+    const setupAppStateListener = async () => {
+      try {
+        const listener = await CapApp.addListener("appStateChange", ({ isActive }) => {
+          console.log("[App State] Active status changed:", isActive);
+          if (!isActive) {
+            // App went to background: close socket cleanly ONLY if they are NOT in an active online match
+            if (activeGameModeRef.current !== "online" && ws && ws.readyState === WebSocket.OPEN) {
+              console.log("[App State] App backgrounded. Closing socket.");
+              ws.close();
+            }
+          } else {
+            // App came to foreground: reconnect immediately if disconnected
+            if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+              console.log("[App State] App foregrounded. Reconnecting socket immediately.");
+              if (socketReconnectTimer.current) clearTimeout(socketReconnectTimer.current);
+              connectWS();
+            }
+          }
+        });
+        return listener;
+      } catch (err) {
+        console.log("Capacitor App state plugin not available in browser", err);
+        return null;
+      }
+    };
+
+    const appStateListenerPromise = setupAppStateListener();
+
     connectWS();
 
     return () => {
       isCleanedUp = true;
       window.removeEventListener("beforeunload", handleBeforeUnload);
+      appStateListenerPromise.then((l) => {
+        if (l) l.remove();
+      });
       if (ws) {
         ws.onclose = null;
         ws.close();
