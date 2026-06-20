@@ -528,10 +528,18 @@ export default function App() {
       };
     };
 
+    const handleBeforeUnload = () => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
     connectWS();
 
     return () => {
       isCleanedUp = true;
+      window.removeEventListener("beforeunload", handleBeforeUnload);
       if (ws) {
         ws.onclose = null;
         ws.close();

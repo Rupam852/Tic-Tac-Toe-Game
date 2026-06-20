@@ -99,10 +99,17 @@ async function startServer() {
   });
 
   const broadcastLobbyInfo = () => {
+    let openCount = 0;
+    wss.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        openCount++;
+      }
+    });
+
     const payload = JSON.stringify({
       type: "lobby_info",
       payload: {
-        onlineCount: activeSockets.size,
+        onlineCount: openCount,
       }
     });
     wss.clients.forEach((client) => {
@@ -130,6 +137,9 @@ async function startServer() {
     ws.on("pong", () => {
       ws.isAlive = true;
     });
+
+    // Broadcast the new online count immediately to everyone
+    broadcastLobbyInfo();
 
     let currentUserId: string | null = null;
     let currentRoomId: string | null = null;
@@ -560,11 +570,10 @@ async function startServer() {
               activeRooms.delete(roomId);
             }
           }
-          
-          // Push updated state of online lobby count to all clients in real-time
-          broadcastLobbyInfo();
         }
       }
+      // Always broadcast updated online lobby count on close, even if user wasn't registered yet!
+      broadcastLobbyInfo();
     });
   });
 
